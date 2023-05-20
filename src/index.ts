@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 import { program } from "commander";
 import { glob, hasMagic } from "glob";
+import { setTimeout } from "timers/promises";
 import { extractTarget } from "./libs/extract-target";
+import { findDivergences } from "./libs/find-divergences";
+import { Option, getOption, setOption } from "./global-option";
 
 program
   .name("kairi")
@@ -11,7 +14,9 @@ program
 
 program
   .argument("<files...>", "target file path")
-  .option("-c, --count", "count of target, do not run the ChatGPT", false);
+  .option("-c, --count", "count of target, do not run the ChatGPT", false)
+  .option("-s, --strict", "more strict check", false)
+  .option("-l, --language <language>", "language of the output", "en");
 
 const getTargetFiles = async (): Promise<string[]> => {
   const [...files] = program.args;
@@ -30,17 +35,15 @@ const getTargetFiles = async (): Promise<string[]> => {
 
 const execCount = async () => {
   const files = await getTargetFiles();
-  const counts = (
-    await Promise.all(
-      files.map(async (file) => {
-        const targetCount = (await extractTarget(file)).length;
-        return {
-          filepath: file,
-          count: targetCount,
-        };
-      })
-    )
-  ).flat();
+  const counts = await Promise.all(
+    files.map(async (file) => {
+      const targetCount = (await extractTarget(file)).length;
+      return {
+        filepath: file,
+        count: targetCount,
+      };
+    })
+  );
 
   counts.forEach(({ filepath, count }) => {
     console.log(`${count}:\t${filepath}`);
@@ -50,13 +53,52 @@ const execCount = async () => {
 };
 
 const execMain = async () => {
-  // TODO: GPT
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not set.");
+  }
+
+  const files = await getTargetFiles();
+  const targets = (
+    await Promise.all(
+      files.map(async (file) => {
+        return extractTarget(file);
+      })
+    )
+  ).flat();
+
+  for (let index = 0; index < targets.length; index++) {
+    const target = targets[index];
+    setTimeout(100);
+    const result = await findDivergences(target);
+    if (!result) {
+      console.warn(`${target.filepath} id failed chat.`);
+      continue;
+    }
+
+    const { strict } = getOption();
+    const threshold = strict ? 2 : 1;
+
+    if (result.rate > threshold) {
+      continue;
+    }
+
+    if (index !== 0) {
+      console.log("\n---\n");
+    }
+
+    console.log(
+      `# ${target.filepath}:${target.methodDeclarationPosition.line}:${target.methodDeclarationPosition.character}`
+    );
+    console.log(`${result.rate}: ${result.reason}`);
+  }
 };
 
 program.parse(process.argv);
-const { count } = program.opts<{ count: boolean }>();
+const option = program.opts<Option>();
 
-if (count) {
+setOption(option);
+
+if (option.count) {
   execCount();
 } else {
   execMain();

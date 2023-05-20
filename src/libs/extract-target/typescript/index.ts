@@ -39,7 +39,9 @@ const extractTarget: ExtractTargetInterface = async (filepath) => {
           methodDeclarationPosition: sourceFile.getLineAndCharacterOfPosition(
             currentNode.getStart()
           ),
+          filepath,
         });
+        visit(currentNode);
       } else {
         visit(currentNode);
       }
