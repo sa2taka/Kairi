@@ -15,7 +15,7 @@ program
 program
   .argument("<files...>", "target file path")
   .option("-c, --count", "count of target, do not run the ChatGPT", false)
-  .option("-s, --strict", "more strict check", false)
+  .option("-s, --strict", "more strict check", true)
   .option("-l, --language <language>", "language of the output", "en");
 
 const getTargetFiles = async (): Promise<string[]> => {
